@@ -4,7 +4,7 @@
  *
  * @author     Сергей Бунин
  * @copyright  Copyright (C) 2017 Sergey Bunin.
- * @license    GNU General Public License version 2 or later.
+ * @license    GNU General Public License v3.0
  *
  * IPSecure - скрипт защиты сайта посредством фильтрации IP-адресов. Его назначение - 
  * защита сайта от ботов, брута, сканирования и прочих действий, которые могут нанести вред
