@@ -5,6 +5,7 @@
  * @author     Сергей Бунин
  * @copyright  Copyright (C) 2017 Sergey Bunin.
  * @license    GNU General Public License v3.0
+ * @version    1.01
  *
  * IPSecure - скрипт защиты сайта посредством фильтрации IP-адресов. Его назначение - 
  * защита сайта от ботов, брута, сканирования и прочих действий, которые могут нанести вред
@@ -19,7 +20,15 @@
  */
 
 
- 
+/**
+ * Проверяем на совместимость с используемой версией PHP. Версия должна быть не ниже 5.3.10
+ */
+if (version_compare(PHP_VERSION, '5.3.10', '<'))
+{
+    die('Your host needs to use PHP 5.3.10 or higher to run this IPSecure!');
+}
+
+
 class CPSS_IPSecure {
     
     /**
@@ -56,31 +65,35 @@ class CPSS_IPSecure {
     function __construct()
     {
         // Проверка диапазона времени задержки выполнения (не более 30 сек.)
-        if ($this->sleep <= 0) $this->sleep = 0;
-        if ($this->sleep > 30) $this->sleep = 30;
+        if ($this->sleep <= 0) { $this->sleep = 0;  }
+        if ($this->sleep > 30) { $this->sleep = 30; }
+        
+        //Получение и установка IP клиента
+        $this->ip = $this->_getIp();
     }
     
     
     
     /**
      * Метод получения текущего ip-адреса из переменных сервера.
+     * Выполняет запись полученного адреса в свойство ip.
      */
     private function _getIp() {
 
         if (!empty($_SERVER['HTTP_CLIENT_IP']))
-		{
-			$this->ip=$_SERVER['HTTP_CLIENT_IP'];
-		}
-		elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR']))
-		{
-			$this->ip=$_SERVER['HTTP_X_FORWARDED_FOR'];
-		}
-		else
-		{
-			$this->ip=$_SERVER['REMOTE_ADDR'];
-		}
+	{
+            $this->ip=$_SERVER['HTTP_CLIENT_IP'];
+	}
+	elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR']))
+	{
+            $this->ip=$_SERVER['HTTP_X_FORWARDED_FOR'];
+	}
+	else
+	{
+            $this->ip=$_SERVER['REMOTE_ADDR'];
+	}
     
-    }
+    } // End function _getIp()
     
 
     /**
@@ -91,6 +104,9 @@ class CPSS_IPSecure {
      */
     private function _detectVIA() 
     {
+        if ($this->ip == '127.0.0.1' || empty($this->ip)) {
+            return FALSE; // отключить для localhost
+        }
         
         if (!empty($_SERVER['HTTP_VIA'])) {
           return true;
@@ -98,14 +114,18 @@ class CPSS_IPSecure {
         
         return FALSE; //строка пуста.
     
-    }
+    } // End function _detectVIA()
     
     
     /**
      * Проверяет IP на наличие в черных списках DNSBL-серверов.
-     * Список серверов задается в файле конфигурации системы.
+     * @return boolean При обнаружении возвращает результат проверки
      */
     private function _checkDNSBL() {
+        
+        if ($this->ip == '127.0.0.1' || empty($this->ip)) {
+            return FALSE; // отключить для localhost
+        }
         
         if(!is_array($this->dnsbl) || !count($this->dnsbl)) {
             return FALSE; // нет списков DNSBL-серверов
@@ -114,11 +134,7 @@ class CPSS_IPSecure {
         // Подготавливаем массив для результатов проверки
         $result = array('dnsbl_hosts' => array(), 'inblack' => 0);
         
-        if (self::_getIp() == '127.0.0.1' || empty(self::_getIp())) {
-            return FALSE; // отключить для localhost
-        }
-        
-        $reverse_ip = implode(".", array_reverse(explode(".", self::_getIp())));
+        $reverse_ip = implode(".", array_reverse(explode(".", $this->ip)));
         
         foreach($this->dnsbl as $dnsbl_host) {
             $is_listed = checkdnsrr($reverse_ip.".".$dnsbl_host.".", "A") ? 1 : 0;
@@ -130,7 +146,8 @@ class CPSS_IPSecure {
         }
         
         return $result;
-    }
+        
+    } // End function _checkDNSBL()
     
     
     /**
@@ -151,18 +168,19 @@ class CPSS_IPSecure {
      */
     private function _detectPort()
     {
-        $ports = array(8080,80,81,1080,6588,8000,3128,553,554,4480);
-        
-        if (self::_getIp() == '127.0.0.1') {
+        if ($this->ip == '127.0.0.1' || empty($this->ip)) {
             return FALSE; // отключить для localhost
         }
+
+        $ports = array(8080,80,81,1080,6588,8000,3128,553,554,4480);
         
         foreach($ports as $port) {
-            if (@fsockopen(self::_getIp(), $port, $errno, $errstr, 5)) {
+            if (@fsockopen($this->ip, $port, $errno, $errstr, 5)) {
                 return TRUE;
             } 
         }
-    }
+        
+    } // End function _detectPort()
     
     
     /**
@@ -171,8 +189,8 @@ class CPSS_IPSecure {
      */
     public function detect() 
     {
-     
-        if (self::_detectVIA()) {
+
+        if ($this->_detectVIA()) {
             return TRUE; // обнаружен признак прокси (HTTP_VIA заполнено).
         }
 
@@ -184,7 +202,7 @@ class CPSS_IPSecure {
         }
         
         // Прокси не определен, запускаем проверку DNSBL
-        if (self::_checkDNSBL()) {
+        if ($this->_checkDNSBL()) {
             return TRUE; // адрес числится в черных списках
         }
 
@@ -234,10 +252,10 @@ $ips->dnsbl = array( // Список серверов, на которых пр�
 );   
 
 
-// Запускаем проверку IP и выполняем действие при обнаружении подозрительных действий
+// Запускаем проверку IP и выполняем действие при обнаружении прокси
 if ($ips->detect()) {
     $ips->action();
 }
 
-    
+ 
     
