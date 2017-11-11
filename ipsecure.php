@@ -201,8 +201,7 @@ class CPSS_IPSecure {
      */
     public function action()
     {
-        //sleep($this->sleep); // пауза
-		die ("PROXY");
+        sleep($this->sleep); // пауза
        
     } // End function action()
     
